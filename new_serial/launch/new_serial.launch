@@ -1,0 +1,8 @@
+<launch>
+  <node pkg="new_serial" type="datafeed_node" name="datafeed" output="screen" required="true"/>
+  <node pkg="new_serial" type="trash_node" name="trash" output="screen"/>
+  <node pkg="new_serial" type="move_node" name="move" output="screen"/>
+  <node pkg="new_serial" type="cruise_node" name="cruise" output="screen"/>
+  <node pkg="new_serial" type="commchk_node" name="commchk" output="screen"/>
+  <node pkg="serial" type="myserialnode" name="myserialnode" output="screen"/>
+</launch>

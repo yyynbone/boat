@@ -1,0 +1,212 @@
+#!/usr/bin/env python
+import rospy
+import os
+import numpy as np
+from std_msgs.msg import Float64MultiArray,Float32,String
+from sensor_msgs.msg import Image
+import math
+from rospy.numpy_msg import numpy_msg
+from boat_msgs.msg import BoatGps,BoatCmd,BoatGpsPoint,BoatGpsPoints
+import paho.mqtt.client as mqtt
+import threading
+import time
+import GPS
+
+auto_state = 0
+qf=4
+def millerToXY(lon, lat):
+    print('millerToXY',lon,lat)
+    L = 6381372.0 * math.pi * 2.0  
+    W = L  
+    H = L / 2.0  
+    mill = 2.3
+    x = float(lon) * math.pi / 180.0  
+    y = float(lat) * math.pi / 180.0
+    y = 1.25 * math.log(math.tan(0.25 * math.pi + 0.4 * y)) 
+    x = (W / 2) + (W / (2 * math.pi)) * x
+    y = (H / 2) + (H / (2 * mill)) * y
+    return int(round(x)), int(round(y))
+
+def get_nodes(msg):
+    global Goal,path,path_now,path_flag
+    path = []
+    print(msg.points)
+    for i in range(len(msg.points)):
+        path.append([msg.points[i].longitude,msg.points[i].latitude])
+    path_now=path[0]
+    path_flag=1
+
+# def avoid_callback(msg):
+#     global avoid_direction,flag_avoid,index
+#     if(index%10==0):
+#         avoid_direction=msg
+#         flag_avoid = 1
+#     index = index + 1
+
+# get gps, heading and gps_flag
+def hedao_callback(msg):
+    global hedao_direction
+    hedao_direction= msg.data
+
+def gps_callback(msg):
+    global Goal,heading,latitude,longitude,index,flag_gps,path_flag,pub1,cmd,path_now,auto_state,hedao_direction,qf,time_now,continue_flag
+    if (index % 10 == 0):
+        latitude=msg.latitude
+        longitude=msg.longitude
+        heading = msg.heading
+        qf=msg.QF
+        heading += 90
+        if heading > 180:
+            heading -= 360
+        flag_gps = 1
+    index += 1
+    #print("auto_state: ",auto_state)
+    #print("path_flag: ",path_flag)
+    #print("flag_gps: ",flag_gps)
+    if(flag_gps == 1 and path_flag==1 and auto_state == 1):
+        flag_gps = 0
+
+        arrive = move_close()
+        # direction.data = combine_direction(avoid_direction,Global_direction())
+        #reverse in 100s , -10m  ,or  at the first node of auto drive
+        if (time.time()-time_now)>=100.0:
+            time_now = time.time()
+            #distance_flag = distance_substraction()
+	    distance_flag = 1
+        else:
+            distance_flag = 0
+        print("arrive: ",arrive,"____disflag: ",distance_flag)
+	print("goal is :",Goal)
+
+        if Goal==0:
+            # when arrive to the nodesGPSpoints or the distance bigger from nodes,call back global_direction and send angle  
+            if qf == 4 and (arrive == 1 or distance_flag == 1 or continue_flag == 1):
+                direction_x= Global_direction()
+                cmd.data=direction_x
+		continue_flag = 1
+		if abs(cmd.data)<10:
+		    continue_flag = 0
+	    else:
+                cmd.data=hedao_direction
+            print("move now")
+        else:
+            cmd.data=360
+
+        pub1.publish(cmd) 
+
+        cmd1.data_float32=[]
+        cmd1.data_float32.append(30.0)
+        if  abs(cmd.data)>45:
+            if  cmd.data>0:
+                cmd.data=10
+            else:
+                cmd.data=-10
+        else:
+            cmd.data=cmd.data/4.5
+        cmd1.data_float32.append(cmd.data)
+        print('heading',heading)
+    else:
+        cmd1.data_float32 = [0.0,0]
+    cmd1.cmd= BoatCmd.SPEED 
+    pub2.publish(cmd1)
+# get new global path node
+
+def move_close():
+    global distance_to_current_goal,path,path_now,longitude,latitude,Goal
+    print(path)
+    if distance_to_current_goal < 10:
+        if len(path)>1:
+            path=path[1:]
+            path_now=path[0]
+        else:
+            Goal=1
+            path_now=[longitude,latitude]
+        return 1
+    else:
+        return 0
+
+# def compare(a,b):
+#     if abs(a) > abs(b):
+#         return a
+#     else:
+#         return b
+
+# # get final direction
+# def combine_direction(avoid_direction,global_direction):
+#     final_direction=0
+#     if avoid_direction*global_direction>0:
+#         final_direction= compare(avoid_direction,global_direction)
+#     else:
+#         final_direction=avoid_direction
+#     return final_direction
+# relative to heading
+def Global_direction():
+    global path_now,heading,latitude,longitude,distance_to_current_goal
+    path_now_gps_y, path_now_gps_x = GPS.BD_to_GPS(path_now[1], path_now[0])
+    print("path now in baidu",path_now)
+    print("path now in gps",path_now_gps_x, path_now_gps_y)
+    print("now gps",longitude,latitude)
+    x1,y1= millerToXY(longitude,latitude)
+    x2,y2= millerToXY(path_now_gps_x,path_now_gps_y)
+    print('current goal',x2-x1,y2-y1)
+    distance_to_current_goal=math.sqrt((x2-x1)**2+(y2-y1)**2)
+    direction_x=90.0 - math.atan2((y2-y1),(x2-x1))*180/math.pi -heading
+    while (direction_x < -360):
+        direction_x += 360
+    while (direction_x > 360):
+        direction_x -= 360
+    if (direction_x < -180):
+        direction_x += 360
+    if (direction_x > 180):
+        direction_x -= 360
+    print('global_direction',direction_x)
+    return direction_x
+
+#reverse direction -10 m
+def distance_substraction():
+    global distance_to_current_goal,distance_before
+    Global_direction()
+    distance_sub = distance_to_current_goal-distance_before
+    distance_before=distance_to_current_goal
+    if distance_sub<-10:
+        return 1
+    else:
+        return 0
+
+def callback_state(state):
+    global auto_state
+    auto_state = int(state.data)
+
+if __name__ == "__main__":
+    Goal=0
+    # flag
+    index = 0
+    # avoid
+    # flag_avoid = 0
+    # avoid_direction = 0.0
+    # gps
+    latitude = 0
+    longitude = 0
+    heading=0
+    flag_gps = 0
+
+    path = []
+    path_now=None
+    path_flag=0
+    distance_to_current_goal=0
+    distance_before=0
+    time_now = 0
+    
+    cmd=Float32()
+    cmd1=BoatCmd()
+    rospy.init_node('navigation', anonymous=True)
+    rospy.Subscriber("boatgps", BoatGps, gps_callback)
+    rospy.Subscriber("nodes", BoatGpsPoints, get_nodes)
+    rospy.Subscriber("hedao_direction", Float32, hedao_callback)
+    rospy.Subscriber("auto_state",String,callback_state)
+    pub2=rospy.Publisher("auto_cmd",BoatCmd,queue_size=1)
+    pub1 = rospy.Publisher("global_direction",Float32, queue_size=1)
+    # rospy.Subscriber("avoid_msg", Float32, avoid_callback)
+    rospy.spin()
+
+

@@ -1,0 +1,31 @@
+<launch>
+ <!-- 
+  <node pkg="boat_control" type="info2net.py" name="info2net" output="screen"/>
+  
+  <node pkg="boat_control" type="net2local.py" name="net2local" output="screen"/>
+-->
+  <node pkg="boat_control" type="info2net_mqtt.py" name="info2net_mqtt" output="screen"/>
+  
+  <node pkg="boat_control" type="net2local_mqtt.py" name="net2local_mqtt" output="screen"/>
+
+  <node pkg="boat_control" type="cmd_speed_manage.py" name="cmd_speed_manage" output="screen"/>
+
+  <node pkg="boat_control" type="navigation.py" name="navigation" output="screen"/>
+  <node pkg="boat_control" type="xixi_v3.py" name="planning_nodes" output="screen"/>
+  
+  <node pkg="boat_control" type="heart_beat.py" name="heart_beat" output="screen"/>
+
+  <include file="$(find mynt_eye_ros_wrapper)/launch/mynteye.launch" />  
+  <node pkg="water_surface" type="water_surface_pred" name="water_surface_pred" output="screen"/>
+  <node pkg="water_surface" type="empty.py" name="empty" output="screen"/>
+
+  
+  <node pkg="yolov4" type="main" name="boat_predict" output="screen"/>
+
+
+  <node pkg="rosserial_python" type="serial_node.py" name="serial_node">
+    <param name="port" value="/dev/mcu"/>
+    <param name="baud" value="250000"/>
+  </node>
+
+</launch>
