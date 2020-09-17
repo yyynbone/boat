@@ -1,0 +1,9 @@
+<launch>
+  <include file="$(find mynt_eye_ros_wrapper)/launch/mynteye.launch" />  
+  <node pkg="water_surface" type="water_surface_pub" name="water_surface_pub" output="screen"/>
+  
+  <node pkg="water_surface" type="water_surface_pred" name="water_surface_pred" output="screen"/>
+  
+  <node pkg="water_surface" type="empty.py" name="empty" output="screen"/>
+
+</launch>

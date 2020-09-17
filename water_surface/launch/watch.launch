@@ -1,0 +1,8 @@
+<launch>
+  <node name="water_surface_pub"          pkg="water_surface"  type="water_surface_pub" output="screen">
+  </node>
+  <node name="water_surface_sub"          pkg="water_surface"  type="water_surface_sub" output="screen">
+  </node>
+  <node name="water_surface_pred"         pkg="water_surface"  type="water_surface_pred" output="screen">
+  </node>
+</launch>
